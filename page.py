@@ -97,7 +97,7 @@ hyperspectralControlCard = dbc.Card(
                        id="startHyperBtn", size="sm", color="success", style={"flex": "1 1 45%"}),
             dbc.Button("Stop",
                        id="stopHyperBtn", size="sm", color="danger", style={"flex": "1 1 45%"}),
-            dbc.Progress(label="0%", value=0, style={
+            dbc.Progress(id="hyperProgressBar", label="0%", value=0, style={
                 "flex": "1 1 45%", "marginTop": "10px"}),
         ], style={"display": "flex", "flexDirection": "row",
                   "gap": "5px", "flexWrap": "wrap"},)
@@ -137,6 +137,18 @@ controls = html.Div(
 
 page = dbc.Container(
     [
+        dcc.Interval(
+            id='interval-hyper',
+            interval=1*1000,  # Update every second (1000 milliseconds)
+            n_intervals=0,  # Number of times the interval has triggered
+            disabled=True
+        ),
+        dcc.Interval(
+            id='interval-initial',
+            interval=1*1000,  # Update every second (1000 milliseconds)
+            n_intervals=0,  # Number of times the interval has triggered
+            disabled=True
+        ),
         html.H1("Camera View"),
         html.Hr(),
         dbc.Row(

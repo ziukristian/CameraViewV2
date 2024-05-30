@@ -7,6 +7,8 @@ from dash import Input, Output, dcc, html
 from sklearn import datasets
 from sklearn.cluster import KMeans
 import time
+import threading
+
 
 # Custom imports
 import repository as repo
@@ -22,7 +24,10 @@ scope = {
     "MinWavenumber": 1042,
     "MaxWavenumber": 1840,
     "BarProgress": 0,
-    "HyperspectralInProgress": False,
+    "InitialImageLoading": False,
+    "InitialImageData": None,
+    "HyperspectralLoading": False,
+    "HyperspectralData": None,
 }
 
 
@@ -32,25 +37,91 @@ app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.layout = page.page
 
 
+# Press "Aquire Initial Image" button to start the thread
 @app.callback(
-    Output("plot-initial", "figure", allow_duplicate=True), [Input("showGraphbtn", "n_clicks")], prevent_initial_call=True,
+    Output("showGraphbtn", "disabled", allow_duplicate=True),
+    Output("startHyperBtn", "disabled", allow_duplicate=True),
+    Output("stopHyperBtn", "disabled", allow_duplicate=True),
+    Output("interval-initial", "disabled", allow_duplicate=True),
+    [Input("showGraphbtn", "n_clicks")],
+    prevent_initial_call=True,
 )
 def loadInitialGraph(n):
-    element = repo.find_element_by_id(page.page, "startHyperBtn")
-    element.color = "primary"
-    data = np.load('data.npy')[2]
-    return repo.generateFigureForPlot(data)
+    scope["InitialImageLoading"] = True
+
+    thread = threading.Thread(
+        target=repo.getInitialImage, args=(scope,)).start()
+
+    return True, True, True, False
 
 
+# Check for the progress of the initial image loading
 @app.callback(
-    Output("plot-hyper", "figure"), [Input("startHyperBtn", "n_clicks")], prevent_initial_call=True
+    Output('plot-initial', 'figure'),
+    Output('interval-initial', 'disabled'),
+    Output("showGraphbtn", "disabled", allow_duplicate=True),
+    Output("stopHyperBtn", "disabled", allow_duplicate=True),
+    Output("startHyperBtn", "disabled", allow_duplicate=True),
+    Input('interval-initial', 'n_intervals'),
+    prevent_initial_call=True
 )
-def loadHyperGraph(n):
-    data = np.load('data.npy')[2]
-    return repo.generateFigureForPlot(data)
+def checkInitialImageProgress(n):
+    if scope["InitialImageLoading"] == False:
+        fig = repo.generateFigureForPlot(scope["InitialImageData"][2])
+        disabledInterval = True
+        return fig, True, False, False, False
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
+
+# Press "Start" button to start the thread and get hyperspectral data
+@app.callback(
+    Output("interval-hyper", "disabled", allow_duplicate=True),
+    Output("startHyperBtn", "disabled", allow_duplicate=True),
+    Output("showGraphbtn", "disabled", allow_duplicate=True),
+    [Input("startHyperBtn", "n_clicks")],
+    prevent_initial_call=True
+)
+def startHyper(n):
+    thread = threading.Thread(
+        target=repo.getHyperspectral, args=(scope,)).start()
+    return False, True, True
+
+
+# This callback will update the hyperspectral progress bar and load the hyperspectral image
+@app.callback(
+    Output('plot-hyper', 'figure', allow_duplicate=True),
+    Output('interval-hyper', 'disabled', allow_duplicate=True),
+    Output("startHyperBtn", "disabled", allow_duplicate=True),
+    Output("showGraphbtn", "disabled", allow_duplicate=True),
+    Output('hyperProgressBar', 'label', allow_duplicate=True),
+    Output('hyperProgressBar', 'value', allow_duplicate=True),
+    Input('interval-hyper', 'n_intervals'),
+    prevent_initial_call=True
+)
+def checkHyperspectralProgress(n):
+    if scope["HyperspectralLoading"] == False:
+        scope['BarProgress'] = 0
+        disabledInterval = True
+        if scope["HyperspectralData"] is None:
+            return dash.no_update, True, False, False, f"{scope['BarProgress']}%", scope["BarProgress"]
+        fig = repo.generateFigureForPlot(scope["HyperspectralData"][2])
+        return fig, True, False, False, f"{scope['BarProgress']}%", scope["BarProgress"]
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"{scope['BarProgress']}%", scope["BarProgress"]
+
+
+# Press "Stop" button to stop the hyperspectral data loading
+@app.callback(
+    Output('hyperProgressBar', 'value'),
+    Input('stopHyperBtn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def stopHyperspectral(n):
+    scope["HyperspectralLoading"] = False
+    return dash.no_update
 
 # This callback will draw a rectangle on the plot when a point is clicked
+
+
 @app.callback(
     Output('plot-initial', 'figure', allow_duplicate=True),
     Input('plot-initial', 'clickData'),
